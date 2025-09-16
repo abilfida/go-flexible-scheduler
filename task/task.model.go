@@ -24,4 +24,5 @@ type Task struct {
 	WebhookURL         string `json:"webhook_url"`
 	ResponseStatusCode int    `json:"response_status_code"`
 	ResponseBody       string `json:"response_body" gorm:"type:text"`
+	RetryCount         int    `json:"retry_count" gorm:"default:0"`
 }

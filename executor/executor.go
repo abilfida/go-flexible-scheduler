@@ -3,6 +3,7 @@ package executor
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -13,72 +14,85 @@ import (
 	"github.com/abilfida/go-flexible-scheduler/task"
 )
 
+const (
+	maxRetries     = 3
+	retryInterval  = 5 * time.Second
+	requestTimeout = 30 * time.Second // Timeout 30 detik
+)
+
 func ExecuteTask(t task.Task) {
 	log.Printf("Executor: Menjalankan task ID %d -> %s %s", t.ID, t.Method, t.URL)
 
-	var req *http.Request
-	var err error
+	var lastError error
+	var success bool = false
+	var resp *http.Response
 
-	// 1. Siapkan Request
-	client := &http.Client{Timeout: 30 * time.Second}
-	requestBody := bytes.NewBuffer([]byte(t.Body))
+	// Loop untuk retry
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		log.Printf("Executor: Menjalankan task ID %d (Attempt %d/%d)...", t.ID, attempt, maxRetries)
 
-	req, err = http.NewRequest(strings.ToUpper(t.Method), t.URL, requestBody)
-	if err != nil {
-		updateTaskAsFailed(t, 0, "Gagal membuat request: "+err.Error())
-		return
-	}
+		// Update retry count di DB untuk setiap percobaan
+		database.DB.Model(&t).Update("retry_count", attempt-1)
 
-	// 2. Tambahkan Headers
-	if t.Headers != "" {
-		var headers map[string]string
-		if err := json.Unmarshal([]byte(t.Headers), &headers); err == nil {
-			for key, val := range headers {
-				req.Header.Set(key, val)
-			}
+		// 1. Siapkan Request
+		client := &http.Client{Timeout: requestTimeout}
+		requestBody := bytes.NewBuffer([]byte(t.Body))
+		req, err := http.NewRequest(strings.ToUpper(t.Method), t.URL, requestBody)
+		if err != nil {
+			lastError = fmt.Errorf("gagal membuat request: %w", err)
+			log.Printf("Executor: Gagal membuat request untuk Task ID %d: %v", t.ID, err)
+			break // Keluar loop jika request tidak valid
 		}
-	}
-	// Default content-type untuk POST
-	if strings.ToUpper(t.Method) == "POST" && req.Header.Get("Content-Type") == "" {
-		req.Header.Set("Content-Type", "application/json")
-	}
 
-	// 3. Tambahkan Query Params
-	if t.QueryParams != "" {
-		var queryParams map[string]string
-		if err := json.Unmarshal([]byte(t.QueryParams), &queryParams); err == nil {
-			q := req.URL.Query()
-			for key, val := range queryParams {
-				q.Add(key, val)
+		// 2. Tambahkan Headers dan Query Params
+		addHeaders(req, t.Headers)
+		addQueryParams(req, t.QueryParams)
+
+		// 3. Lakukan HTTP Request
+		resp, err = client.Do(req)
+		if err != nil {
+			lastError = fmt.Errorf("attempt %d gagal: %w", attempt, err)
+			log.Printf("Executor: Attempt %d Gagal untuk Task ID %d: %v", attempt, t.ID, err)
+
+			// Tunggu sebelum retry berikutnya jika bukan attempt terakhir
+			if attempt < maxRetries {
+				time.Sleep(retryInterval)
 			}
-			req.URL.RawQuery = q.Encode()
+			continue // Lanjutkan ke attempt berikutnya
 		}
+
+		// Jika request berhasil (tidak ada error jaringan/timeout), anggap sukses dan keluar loop
+		success = true
+		break
 	}
 
-	// 4. Lakukan HTTP Request
-	resp, err := client.Do(req)
-	if err != nil {
-		updateTaskAsFailed(t, 0, "Gagal melakukan request: "+err.Error())
-		return
+	// 4. Proses Hasil Akhir
+	if !success {
+		// Jika semua attempt gagal
+		log.Printf("Executor: Task ID %d Gagal setelah %d attempts. Alasan akhir: %v", t.ID, maxRetries, lastError)
+		t.Status = task.StatusFailed
+		if lastError != nil {
+			t.ResponseBody = lastError.Error()
+		}
+	} else {
+		// Jika salah satu attempt berhasil
+		defer resp.Body.Close()
+		respBody, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			t.Status = task.StatusFailed
+			t.ResponseBody = "Gagal membaca response body: " + err.Error()
+		} else {
+			t.Status = task.StatusCompleted
+			t.ResponseBody = string(respBody)
+			t.ResponseStatusCode = resp.StatusCode
+		}
+		log.Printf("Executor: Task ID %d Selesai | Status: %d", t.ID, resp.StatusCode)
 	}
-	defer resp.Body.Close()
 
-	// 5. Baca Response Body
-	respBody, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		updateTaskAsFailed(t, resp.StatusCode, "Gagal membaca response body: "+err.Error())
-		return
-	}
-
-	// 6. Update Task sebagai Berhasil
-	t.Status = task.StatusCompleted
-	t.ResponseStatusCode = resp.StatusCode
-	t.ResponseBody = string(respBody)
+	// 5. Simpan status akhir ke Database
 	database.DB.Save(&t)
 
-	log.Printf("Executor: Task ID %d Selesai | Status: %d", t.ID, resp.StatusCode)
-
-	// 7. Kirim Webhook (jika ada)
+	// 6. Kirim Webhook dengan hasil akhir
 	if t.WebhookURL != "" {
 		go sendWebhook(t)
 	}
@@ -93,6 +107,37 @@ func updateTaskAsFailed(t task.Task, statusCode int, reason string) {
 
 	if t.WebhookURL != "" {
 		go sendWebhook(t)
+	}
+}
+
+// Fungsi helper untuk menambah headers
+func addHeaders(req *http.Request, headersJSON string) {
+	if headersJSON == "" {
+		return
+	}
+	var headers map[string]string
+	if err := json.Unmarshal([]byte(headersJSON), &headers); err == nil {
+		for key, val := range headers {
+			req.Header.Set(key, val)
+		}
+	}
+	if req.Method == "POST" && req.Header.Get("Content-Type") == "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+}
+
+// Fungsi helper untuk menambah query params
+func addQueryParams(req *http.Request, queryParamsJSON string) {
+	if queryParamsJSON == "" {
+		return
+	}
+	var queryParams map[string]string
+	if err := json.Unmarshal([]byte(queryParamsJSON), &queryParams); err == nil {
+		q := req.URL.Query()
+		for key, val := range queryParams {
+			q.Add(key, val)
+		}
+		req.URL.RawQuery = q.Encode()
 	}
 }
 
