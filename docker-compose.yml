@@ -9,4 +9,8 @@ services:
       - "3100:3000"
     env_file:
       - .env
-    # 'depends_on' dihapus karena database berjalan secara eksternal
+    deploy:
+      resources:
+        limits:
+          cpus: '0.2'
+          memory: 50M
