@@ -5,6 +5,10 @@ WORKDIR /app
 
 # Copy go.mod dan go.sum untuk caching dependensi
 COPY go.mod go.sum ./
+
+# DITAMBAHKAN: Set GOPROXY ke alternatif global yang andal
+ENV GOPROXY=https://goproxy.io,direct
+
 RUN go mod download
 
 # Copy seluruh source code

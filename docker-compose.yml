@@ -6,7 +6,7 @@ services:
     container_name: scheduler_app
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3100:3000"
     env_file:
       - .env
     # 'depends_on' dihapus karena database berjalan secara eksternal
