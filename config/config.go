@@ -7,9 +7,10 @@ import (
 )
 
 type Config struct {
-	DSN      string
-	Port     string
-	Timezone string
+	DSN       string
+	Port      string
+	Timezone  string
+	JWTSecret string
 }
 
 func LoadConfig() (*Config, error) {
@@ -30,9 +31,12 @@ func LoadConfig() (*Config, error) {
 		tz = "Asia/Jakarta" // <-- DEFAULT TIMEZONE
 	}
 
+	jwtSecret := os.Getenv("JWT_SECRET")
+
 	return &Config{
-		DSN:      dsn,
-		Port:     port,
-		Timezone: tz,
+		DSN:       dsn,
+		Port:      port,
+		Timezone:  tz,
+		JWTSecret: jwtSecret,
 	}, nil
 }

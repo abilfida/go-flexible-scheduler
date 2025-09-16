@@ -3,7 +3,16 @@ package task
 import (
 	"github.com/abilfida/go-flexible-scheduler/database"
 	"github.com/gofiber/fiber/v2"
+	"github.com/golang-jwt/jwt/v5"
 )
+
+// getUserIDFromToken mengekstrak user_id dari JWT
+func getUserIDFromToken(c *fiber.Ctx) uint {
+	userToken := c.Locals("user").(*jwt.Token)
+	claims := userToken.Claims.(jwt.MapClaims)
+	userID := uint(claims["user_id"].(float64))
+	return userID
+}
 
 // CreateTask: Menambah task baru
 func CreateTask(c *fiber.Ctx) error {
@@ -12,7 +21,10 @@ func CreateTask(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 
+	userID := getUserIDFromToken(c)
+	task.UserID = userID // Set pemilik task
 	task.Status = StatusPending
+
 	result := database.DB.Create(&task)
 	if result.Error != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": result.Error.Error()})
@@ -23,16 +35,18 @@ func CreateTask(c *fiber.Ctx) error {
 
 // GetTasks: Menampilkan semua task
 func GetTasks(c *fiber.Ctx) error {
+	userID := getUserIDFromToken(c)
 	var tasks []Task
-	database.DB.Find(&tasks)
+	database.DB.Where("user_id = ?", userID).Find(&tasks)
 	return c.JSON(tasks)
 }
 
 // GetTask: Menampilkan satu task berdasarkan ID
 func GetTask(c *fiber.Ctx) error {
+	userID := getUserIDFromToken(c)
 	id := c.Params("id")
 	var task Task
-	result := database.DB.First(&task, id)
+	result := database.DB.Where("user_id = ?", userID).First(&task, id)
 	if result.Error != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Task tidak ditemukan"})
 	}
@@ -41,9 +55,10 @@ func GetTask(c *fiber.Ctx) error {
 
 // UpdateTask: Mengubah task yang ada
 func UpdateTask(c *fiber.Ctx) error {
+	userID := getUserIDFromToken(c)
 	id := c.Params("id")
 	var task Task
-	if err := database.DB.First(&task, id).Error; err != nil {
+	if err := database.DB.Where("user_id = ?", userID).First(&task, id).Error; err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Task tidak ditemukan"})
 	}
 
@@ -52,17 +67,23 @@ func UpdateTask(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	// Hanya update field yang di-provide
 	database.DB.Model(&task).Updates(updateData)
 	return c.JSON(task)
 }
 
 // DeleteTask: Menghapus task
 func DeleteTask(c *fiber.Ctx) error {
+	userID := getUserIDFromToken(c)
 	id := c.Params("id")
-	result := database.DB.Delete(&Task{}, id)
-	if result.RowsAffected == 0 {
+	var task Task
+	// Verifikasi kepemilikan sebelum menghapus
+	if err := database.DB.Where("user_id = ?", userID).First(&task, id).Error; err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Task tidak ditemukan"})
+	}
+
+	result := database.DB.Delete(&task)
+	if result.RowsAffected == 0 {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Gagal menghapus task"})
 	}
 	return c.SendStatus(fiber.StatusNoContent)
 }

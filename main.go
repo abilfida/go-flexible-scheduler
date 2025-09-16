@@ -7,8 +7,8 @@ import (
 	"github.com/abilfida/go-flexible-scheduler/config"
 	"github.com/abilfida/go-flexible-scheduler/database"
 	"github.com/abilfida/go-flexible-scheduler/migration"
+	"github.com/abilfida/go-flexible-scheduler/router"
 	"github.com/abilfida/go-flexible-scheduler/scheduler"
-	"github.com/abilfida/go-flexible-scheduler/task"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -34,15 +34,11 @@ func main() {
 	// Jalankan Migrasi Database
 	migration.AutoMigrate(database.DB)
 
-	// Lakukan Auto-Migration untuk tabel Task
-	database.DB.AutoMigrate(&task.Task{})
-	log.Println("Database Migrated.")
-
 	// Inisialisasi Fiber App
 	app := fiber.New()
 
 	// Setup Routing
-	task.SetupTaskRoutes(app)
+	router.SetupTaskRoutes(app)
 
 	// Jalankan Scheduler di background
 	go scheduler.StartScheduler()

@@ -13,6 +13,7 @@ const (
 
 type Task struct {
 	gorm.Model
+	UserID             uint   `json:"user_id"`
 	URL                string `json:"url" gorm:"not null"`
 	Method             string `json:"method" gorm:"not null;default:'GET'"`
 	Headers            string `json:"headers" gorm:"type:text"`      // Store as JSON string
