@@ -7,8 +7,9 @@ import (
 )
 
 type Config struct {
-	DSN  string
-	Port string
+	DSN      string
+	Port     string
+	Timezone string
 }
 
 func LoadConfig() (*Config, error) {
@@ -23,8 +24,15 @@ func LoadConfig() (*Config, error) {
 		port = "3000" // Default port
 	}
 
+	// Atur timezone, default ke "Asia/Jakarta" jika tidak ada di .env
+	tz := os.Getenv("APP_TIMEZONE")
+	if tz == "" {
+		tz = "Asia/Jakarta" // <-- DEFAULT TIMEZONE
+	}
+
 	return &Config{
-		DSN:  dsn,
-		Port: port,
+		DSN:      dsn,
+		Port:     port,
+		Timezone: tz,
 	}, nil
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"time"
 
 	"github.com/abilfida/go-flexible-scheduler/config"
 	"github.com/abilfida/go-flexible-scheduler/database"
@@ -12,33 +13,41 @@ import (
 )
 
 func main() {
-	// 1. Muat Konfigurasi
+	// Muat Konfigurasi
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		log.Fatalf("Tidak dapat memuat konfigurasi: %v", err)
 	}
 
-	// 2. Hubungkan ke Database
+	// Atur Timezone Aplikasi
+	loc, err := time.LoadLocation(cfg.Timezone)
+	if err != nil {
+		log.Fatalf("Gagal memuat timezone: %v", err)
+	}
+	time.Local = loc // Mengatur timezone default untuk seluruh aplikasi
+	log.Printf("Timezone aplikasi diatur ke: %s", loc.String())
+
+	// Hubungkan ke Database
 	database.ConnectDB(cfg.DSN)
 	log.Println("Koneksi Database Berhasil.")
 
-	// 3. Jalankan Migrasi Database
+	// Jalankan Migrasi Database
 	migration.AutoMigrate(database.DB)
 
-	// 4. Lakukan Auto-Migration untuk tabel Task
+	// Lakukan Auto-Migration untuk tabel Task
 	database.DB.AutoMigrate(&task.Task{})
 	log.Println("Database Migrated.")
 
-	// 5. Inisialisasi Fiber App
+	// Inisialisasi Fiber App
 	app := fiber.New()
 
-	// 6. Setup Routing
+	// Setup Routing
 	task.SetupTaskRoutes(app)
 
-	// 7. Jalankan Scheduler di background
+	// Jalankan Scheduler di background
 	go scheduler.StartScheduler()
 	log.Println("Scheduler Engine Dimulai.")
 
-	// 8. Jalankan Server API
+	// Jalankan Server API
 	log.Fatal(app.Listen(":" + cfg.Port))
 }

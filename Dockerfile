@@ -20,6 +20,9 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /scheduler-app .
 # --- Tahap 2: Deploy ---
 FROM alpine:latest
 
+# Install paket tzdata untuk informasi timezone
+RUN apk --no-cache add tzdata
+
 RUN apk --no-cache add ca-certificates
 
 WORKDIR /root/
