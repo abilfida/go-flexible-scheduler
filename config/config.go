@@ -2,15 +2,17 @@ package config
 
 import (
 	"os"
+	"strconv"
 
 	"github.com/joho/godotenv"
 )
 
 type Config struct {
-	DSN       string
-	Port      string
-	Timezone  string
-	JWTSecret string
+	DSN                  string
+	Port                 string
+	Timezone             string
+	JWTSecret            string
+	CleanupIntervalHours int
 }
 
 func LoadConfig() (*Config, error) {
@@ -33,10 +35,17 @@ func LoadConfig() (*Config, error) {
 
 	jwtSecret := os.Getenv("JWT_SECRET")
 
+	// Muat interval cleanup, default ke 24 jam jika tidak ada atau error
+	cleanupInterval, err := strconv.Atoi(os.Getenv("CLEANUP_INTERVAL_HOURS"))
+	if err != nil {
+		cleanupInterval = 24 // Default 24 jam
+	}
+
 	return &Config{
-		DSN:       dsn,
-		Port:      port,
-		Timezone:  tz,
-		JWTSecret: jwtSecret,
+		DSN:                  dsn,
+		Port:                 port,
+		Timezone:             tz,
+		JWTSecret:            jwtSecret,
+		CleanupIntervalHours: cleanupInterval,
 	}, nil
 }
