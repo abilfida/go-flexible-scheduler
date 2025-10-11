@@ -38,7 +38,7 @@ func main() {
 	app := fiber.New()
 
 	// Setup Routing
-	router.SetupTaskRoutes(app)
+	router.SetupRoutes(app)
 
 	// Jalankan Scheduler di background
 	go scheduler.StartScheduler()

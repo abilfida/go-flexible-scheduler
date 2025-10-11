@@ -7,9 +7,10 @@ import (
 	"github.com/abilfida/go-flexible-scheduler/database"
 	"github.com/abilfida/go-flexible-scheduler/executor"
 	"github.com/abilfida/go-flexible-scheduler/task"
+	"gorm.io/gorm"
 )
 
-const checkInterval = 5 * time.Second // Seberapa sering scheduler memeriksa DB
+const checkInterval = 5 * time.Second
 
 func StartScheduler() {
 	ticker := time.NewTicker(checkInterval)
@@ -21,13 +22,13 @@ func StartScheduler() {
 }
 
 func findAndExecuteTasks() {
-	log.Println("Scheduler: Memeriksa tugas yang jatuh tempo...")
+	log.Println("Scheduler: Memeriksa tugas di 'tasks_pending'...")
 
-	var tasksToRun []task.Task
+	var tasksToRun []task.TaskPending
 	now := time.Now().Format("2006-01-02 15:04:05")
 
-	// Cari task yang statusnya 'pending' dan waktunya sudah lewat
-	database.DB.Where("status = ? AND scheduled_at <= ?", task.StatusPending, now).Find(&tasksToRun)
+	// 1. Hanya cari dari tabel tasks_pending
+	database.DB.Where("scheduled_at <= ?", now).Find(&tasksToRun)
 
 	if len(tasksToRun) == 0 {
 		return
@@ -36,10 +37,26 @@ func findAndExecuteTasks() {
 	log.Printf("Scheduler: Menemukan %d tugas untuk dijalankan.", len(tasksToRun))
 
 	for _, t := range tasksToRun {
-		// Update status menjadi 'running' agar tidak diambil oleh worker lain
-		database.DB.Model(&t).Update("status", task.StatusRunning)
+		// 2. Pindahkan task dari 'pending' ke 'running' dalam sebuah transaksi
+		runningTask := task.TaskRunning{TaskCore: t.TaskCore}
+		runningTask.ID = t.ID // Pertahankan ID yang sama
 
-		// Jalankan eksekusi di goroutine terpisah agar tidak memblokir scheduler
-		go executor.ExecuteTask(t)
+		err := database.DB.Transaction(func(tx *gorm.DB) error {
+			if err := tx.Create(&runningTask).Error; err != nil {
+				return err
+			}
+			if err := tx.Delete(&t).Error; err != nil {
+				return err
+			}
+			return nil
+		})
+
+		if err != nil {
+			log.Printf("Scheduler: Gagal memindahkan Task ID %d ke 'running': %v", t.ID, err)
+			continue // Lanjut ke task berikutnya jika gagal
+		}
+
+		// 3. Jalankan eksekusi di goroutine
+		go executor.ExecuteTask(runningTask)
 	}
 }

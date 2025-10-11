@@ -5,12 +5,14 @@ import (
 	"github.com/abilfida/go-flexible-scheduler/user"
 )
 
-// Dapatkan semua model yang perlu dimigrasi untuk versi pertama.
+// Dapatkan semua model yang perlu dimigrasi.
 func getVersion1Models() []interface{} {
 	return []interface{}{
 		&user.User{},
-		&task.Task{},
-		// Tambahkan model lain di sini jika ada untuk v1
+		&task.TaskPending{},   // <-- TAMBAHKAN
+		&task.TaskRunning{},   // <-- TAMBAHKAN
+		&task.TaskCompleted{}, // <-- TAMBAHKAN
+		&task.TaskFailed{},    // <-- TAMBAHKAN
 	}
 }
 

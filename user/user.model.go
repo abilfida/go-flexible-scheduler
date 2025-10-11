@@ -1,16 +1,14 @@
 package user
 
 import (
-	"github.com/abilfida/go-flexible-scheduler/task"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
 type User struct {
 	gorm.Model
-	Username string      `json:"username" gorm:"unique;not null"`
-	Password string      `json:"-"`     // Jangan pernah tampilkan password di JSON
-	Tasks    []task.Task `json:"tasks"` // Relasi one-to-many
+	Username string `json:"username" gorm:"unique;not null"`
+	Password string `json:"-"` // Jangan pernah tampilkan password di JSON
 }
 
 // HashPassword mengenkripsi password sebelum disimpan
