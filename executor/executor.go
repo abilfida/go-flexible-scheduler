@@ -26,6 +26,10 @@ func ExecuteTask(runningTask task.TaskRunning) {
 	var lastError error
 	var success bool = false
 	var resp *http.Response
+	var requestDurationMs int64
+
+	// Tandai waktu mulai keseluruhan proses
+	requestStartTime := time.Now()
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		log.Printf("Executor: Menjalankan task ID %d (Attempt %d/%d)...", runningTask.ID, attempt, maxRetries)
@@ -52,28 +56,39 @@ func ExecuteTask(runningTask task.TaskRunning) {
 		break
 	}
 
+	// Hitung durasi request -> response
+	requestDurationMs = time.Since(requestStartTime).Milliseconds()
+	runningTask.RequestDurationMS = requestDurationMs
+
 	// Memproses hasil dan memindahkan task
 	if !success {
 		log.Printf("Executor: Task ID %d Gagal setelah %d attempts. Alasan akhir: %v", runningTask.ID, maxRetries, lastError)
 		runningTask.ResponseBody = lastError.Error()
-		moveTaskToFinalState(runningTask, task.TaskFailed{TaskCore: runningTask.TaskCore})
+		moveTaskToFinalState(runningTask, &task.TaskFailed{TaskCore: runningTask.TaskCore}, requestStartTime)
 	} else {
 		defer resp.Body.Close()
 		respBody, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
 			runningTask.ResponseBody = "Gagal membaca response body: " + err.Error()
-			moveTaskToFinalState(runningTask, &task.TaskFailed{TaskCore: runningTask.TaskCore})
+			moveTaskToFinalState(runningTask, &task.TaskFailed{TaskCore: runningTask.TaskCore}, requestStartTime)
 		} else {
 			log.Printf("Executor: Task ID %d Selesai | Status: %d", runningTask.ID, resp.StatusCode)
 			runningTask.ResponseStatusCode = resp.StatusCode
 			runningTask.ResponseBody = string(respBody)
-			moveTaskToFinalState(runningTask, &task.TaskCompleted{TaskCore: runningTask.TaskCore})
+			moveTaskToFinalState(runningTask, &task.TaskCompleted{TaskCore: runningTask.TaskCore}, requestStartTime)
 		}
 	}
 }
 
-// Fungsi baru untuk memindahkan task dari 'running' ke state akhir ('completed' atau 'failed')
-func moveTaskToFinalState(runningTask task.TaskRunning, finalState interface{}) {
+// moveTaskToFinalState sekarang menerima `requestStartTime` untuk diteruskan ke webhook.
+func moveTaskToFinalState(runningTask task.TaskRunning, finalState interface{}, requestStartTime time.Time) {
+	var finalTableName string
+	switch finalState.(type) {
+	case *task.TaskCompleted:
+		finalTableName = "tasks_completed"
+	case *task.TaskFailed:
+		finalTableName = "tasks_failed"
+	}
 	err := database.DB.Transaction(func(tx *gorm.DB) error {
 		// 1. Create record di tabel tujuan (completed/failed)
 		if err := tx.Create(finalState).Error; err != nil {
@@ -93,7 +108,7 @@ func moveTaskToFinalState(runningTask task.TaskRunning, finalState interface{}) 
 
 	// Kirim Webhook (setelah task berhasil dipindahkan)
 	if runningTask.WebhookURL != "" {
-		go sendWebhook(runningTask.TaskCore)
+		go sendWebhookAndTrackDuration(runningTask.TaskCore, finalTableName, requestStartTime)
 	}
 }
 
@@ -151,7 +166,8 @@ func buildRequest(t task.TaskRunning) (*http.Request, error) {
 	return req, nil
 }
 
-func sendWebhook(t task.TaskCore) {
+// Fungsi sendWebhook diganti dengan ini untuk melacak durasi.
+func sendWebhookAndTrackDuration(t task.TaskCore, finalTableName string, requestStartTime time.Time) {
 	payload, err := json.Marshal(t)
 	if err != nil {
 		log.Printf("Webhook: Gagal encode payload untuk Task ID %s: %v", t.ProcessID, err)
@@ -164,6 +180,15 @@ func sendWebhook(t task.TaskCore) {
 		return
 	}
 	defer resp.Body.Close()
+
+	// Hitung durasi total dari request awal -> webhook selesai
+	totalDurationMs := time.Since(requestStartTime).Milliseconds()
+
+	// Update kolom webhook_duration_ms di tabel yang benar (completed atau failed)
+	err = database.DB.Table(finalTableName).Where("process_id = ?", t.ProcessID).Update("webhook_duration_ms", totalDurationMs).Error
+	if err != nil {
+		log.Printf("Webhook: Gagal update durasi webhook untuk Process ID %s: %v", t.ProcessID, err)
+	}
 
 	log.Printf("Webhook: Berhasil mengirim notifikasi untuk Task ID %s, status response webhook: %s", t.ProcessID, resp.Status)
 }

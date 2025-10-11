@@ -19,6 +19,8 @@ type TaskCore struct {
 	ResponseStatusCode int    `json:"response_status_code"`
 	ResponseBody       string `json:"response_body" gorm:"type:text"`
 	RetryCount         int    `json:"retry_count" gorm:"default:0"`
+	RequestDurationMS  int64  `json:"request_duration_ms"`
+	WebhookDurationMS  int64  `json:"webhook_duration_ms"`
 }
 
 // TaskPending untuk tugas yang belum dijalankan.
