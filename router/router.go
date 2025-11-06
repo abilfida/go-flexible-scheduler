@@ -28,4 +28,13 @@ func SetupRoutes(app *fiber.App) {
 	// Rute lain yang disesuaikan
 	taskGroup.Delete("/:status/:id", task.DeleteTask)
 	// taskGroup.Put("/:status/:id", task.UpdateTask) // Jika diimplementasikan
+
+	// Rute Recurring Tasks
+	recurringGroup := api.Group("/recurring", middleware.Protected())
+	recurringGroup.Post("/", task.CreateRecurringTask)           // POST /api/v1/recurring
+	recurringGroup.Get("/", task.GetRecurringTasks)             // GET /api/v1/recurring
+	recurringGroup.Get("/:id", task.GetRecurringTask)           // GET /api/v1/recurring/:id
+	recurringGroup.Put("/:id", task.UpdateRecurringTask)        // PUT /api/v1/recurring/:id
+	recurringGroup.Delete("/:id", task.DeleteRecurringTask)     // DELETE /api/v1/recurring/:id
+	recurringGroup.Post("/:id/toggle", task.ToggleRecurringTask) // POST /api/v1/recurring/:id/toggle
 }
