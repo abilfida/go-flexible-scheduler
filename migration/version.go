@@ -13,6 +13,7 @@ func getVersion1Models() []interface{} {
 		&task.TaskRunning{},   // <-- TAMBAHKAN
 		&task.TaskCompleted{}, // <-- TAMBAHKAN
 		&task.TaskFailed{},    // <-- TAMBAHKAN
+		&task.RecurringTask{}, // <-- TAMBAHKAN RECURRING TASK
 	}
 }
 
