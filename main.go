@@ -44,8 +44,13 @@ func main() {
 	go scheduler.StartScheduler()
 	log.Println("Scheduler Engine Dimulai.")
 
-	// 8. Jalankan Scheduler Pembersihan di background
-	go scheduler.StartCleanupScheduler(cfg.CleanupIntervalHours) // <-- TAMBAHKAN INI
+	// Jalankan Recurring Scheduler di background
+	go scheduler.StartRecurringScheduler()
+	log.Println("Recurring Scheduler Engine Dimulai.")
+
+	// Jalankan Scheduler Pembersihan di background
+	go scheduler.StartCleanupScheduler(cfg.CleanupIntervalHours)
+	log.Println("Cleanup Scheduler Engine Dimulai.")
 
 	// Jalankan Server API
 	log.Fatal(app.Listen(":" + cfg.Port))
