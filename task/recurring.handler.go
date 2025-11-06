@@ -7,28 +7,27 @@ import (
 
 	"github.com/abilfida/go-flexible-scheduler/database"
 	"github.com/gofiber/fiber/v2"
-	"github.com/golang-jwt/jwt/v5"
 	"gorm.io/gorm"
 )
 
 // CreateRecurringTask creates a new recurring task
 func CreateRecurringTask(c *fiber.Ctx) error {
 	userID := getUserIDFromToken(c)
-	
+
 	var req struct {
 		TaskCore
-		Name        string                `json:"name" validate:"required"`
-		Description string                `json:"description"`
-		Pattern     RecurringTaskPattern  `json:"pattern" validate:"required"`
-		Interval    int                   `json:"interval"`
-		Time        string                `json:"time"`
-		DayOfWeek   int                   `json:"day_of_week"`
-		DayOfMonth  int                   `json:"day_of_month"`
-		CronExpr    string                `json:"cron_expr"`
-		IsActive    *bool                 `json:"is_active"`
-		StartDate   time.Time             `json:"start_date" validate:"required"`
-		EndDate     *time.Time            `json:"end_date"`
-		MaxRuns     *int                  `json:"max_runs"`
+		Name        string               `json:"name" validate:"required"`
+		Description string               `json:"description"`
+		Pattern     RecurringTaskPattern `json:"pattern" validate:"required"`
+		Interval    int                  `json:"interval"`
+		Time        string               `json:"time"`
+		DayOfWeek   int                  `json:"day_of_week"`
+		DayOfMonth  int                  `json:"day_of_month"`
+		CronExpr    string               `json:"cron_expr"`
+		IsActive    *bool                `json:"is_active"`
+		StartDate   time.Time            `json:"start_date" validate:"required"`
+		EndDate     *time.Time           `json:"end_date"`
+		MaxRuns     *int                 `json:"max_runs"`
 	}
 
 	if err := c.BodyParser(&req); err != nil {
@@ -110,10 +109,10 @@ func CreateRecurringTask(c *fiber.Ctx) error {
 // GetRecurringTasks retrieves all recurring tasks for the authenticated user
 func GetRecurringTasks(c *fiber.Ctx) error {
 	userID := getUserIDFromToken(c)
-	
+
 	var recurringTasks []RecurringTask
 	result := database.DB.Where("user_id = ?", userID).Order("created_at DESC").Find(&recurringTasks)
-	
+
 	if result.Error != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to retrieve recurring tasks: " + result.Error.Error(),
@@ -130,7 +129,7 @@ func GetRecurringTask(c *fiber.Ctx) error {
 
 	var recurringTask RecurringTask
 	result := database.DB.Where("user_id = ? AND id = ?", userID, id).First(&recurringTask)
-	
+
 	if result.Error != nil {
 		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -153,7 +152,7 @@ func UpdateRecurringTask(c *fiber.Ctx) error {
 	// Find existing task
 	var recurringTask RecurringTask
 	result := database.DB.Where("user_id = ? AND id = ?", userID, id).First(&recurringTask)
-	
+
 	if result.Error != nil {
 		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -261,7 +260,7 @@ func UpdateRecurringTask(c *fiber.Ctx) error {
 				"error": err.Error(),
 			})
 		}
-		
+
 		// Recalculate next run
 		recurringTask.NextRun = recurringTask.CalculateNextRun(time.Now())
 	}
@@ -284,13 +283,13 @@ func DeleteRecurringTask(c *fiber.Ctx) error {
 
 	// Find and delete the task
 	result := database.DB.Where("user_id = ? AND id = ?", userID, id).Delete(&RecurringTask{})
-	
+
 	if result.Error != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to delete recurring task: " + result.Error.Error(),
 		})
 	}
-	
+
 	if result.RowsAffected == 0 {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "Recurring task not found",
@@ -308,7 +307,7 @@ func ToggleRecurringTask(c *fiber.Ctx) error {
 	// Find existing task
 	var recurringTask RecurringTask
 	result := database.DB.Where("user_id = ? AND id = ?", userID, id).First(&recurringTask)
-	
+
 	if result.Error != nil {
 		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -338,8 +337,8 @@ func ToggleRecurringTask(c *fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{
 		"message": "Recurring task toggled successfully",
-		"active": recurringTask.IsActive,
-		"task": recurringTask,
+		"active":  recurringTask.IsActive,
+		"task":    recurringTask,
 	})
 }
 
@@ -401,13 +400,13 @@ func isValidTimeFormat(timeStr string) bool {
 	if timeStr[2] != ':' {
 		return false
 	}
-	
+
 	hour, err1 := strconv.Atoi(timeStr[0:2])
 	minute, err2 := strconv.Atoi(timeStr[3:5])
-	
+
 	if err1 != nil || err2 != nil {
 		return false
 	}
-	
+
 	return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59
 }

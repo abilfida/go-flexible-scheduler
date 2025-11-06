@@ -1,6 +1,9 @@
 # --- Tahap 1: Build ---
 FROM golang:1.24-alpine AS builder
 
+# Instal paket yang dibutuhkan: ca-certificates
+RUN apk add --no-cache ca-certificates
+
 WORKDIR /app
 
 # Copy go.mod dan go.sum untuk caching dependensi
@@ -15,23 +18,21 @@ RUN go mod download
 COPY . .
 
 # Build aplikasi Go menjadi binary yang statis
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /scheduler-app .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o flexible-scheduler .
 
 # --- Tahap 2: Deploy ---
 FROM alpine:latest
 
 # Install paket tzdata untuk informasi timezone
-RUN apk --no-cache add tzdata
+RUN apk add --no-cache tzdata ca-certificates
 
-RUN apk --no-cache add ca-certificates
-
-WORKDIR /root/
+WORKDIR /app
 
 # Copy binary yang sudah di-build dari tahap sebelumnya
-COPY --from=builder /scheduler-app .
+COPY --from=builder /app/flexible-scheduler .
 
 # Expose port yang digunakan oleh aplikasi
-EXPOSE 3000
+# EXPOSE 3000
 
 # Perintah untuk menjalankan aplikasi saat container dimulai
-CMD ["./scheduler-app"]
+CMD ["/app/flexible-scheduler"]

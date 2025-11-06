@@ -3,7 +3,7 @@ version: '3.8'
 services:
   app:
     build: .
-    container_name: scheduler_app
+    container_name: flexible-scheduler
     restart: unless-stopped
     ports:
       - "3100:3000"
